@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# cohesivity tenant credentials (contains secret management key — never commit)
+.cohesivity
+
 # vercel
 .vercel
 
