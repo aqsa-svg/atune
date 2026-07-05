@@ -1,18 +1,29 @@
-// Attune service worker — deliberately conservative so it never serves stale
-// auth/dynamic pages or touches the Cohesivity API.
-const CACHE = "attune-v1";
-const PRECACHE = ["/offline.html", "/icon-192.png"];
+// Attune service worker — v2.
+//
+// Deliberately minimal. It NEVER caches app code (HTML, or /_next JS/CSS), so it
+// can never freeze the app by serving a stale or mismatched bundle after a
+// deploy. Its only job is to show an on-brand offline page when a navigation
+// fails with no connection.
+//
+// v1 was cache-first on /_next/static, which could pin outdated JavaScript on a
+// device across deploys and leave the page painted but dead. Bumping the cache
+// name below makes this worker delete that old cache on activate, self-healing
+// any device that still has v1 installed.
+const CACHE = "attune-v2";
+const OFFLINE = "/offline.html";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((c) => c.addAll(PRECACHE))
+      .then((c) => c.add(OFFLINE))
       .then(() => self.skipWaiting()),
   );
 });
 
 self.addEventListener("activate", (event) => {
+  // Purge every previous cache (including the aggressive "attune-v1"). This is
+  // what unbricks devices stuck on the old worker.
   event.waitUntil(
     caches
       .keys()
@@ -23,39 +34,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET") return;
-
-  const url = new URL(request.url);
-  // Never intercept cross-origin (e.g. the Cohesivity API / gateway).
-  if (url.origin !== self.location.origin) return;
-
-  // Navigations: network-first, fall back to the offline page only when offline.
-  // This keeps dynamic + authenticated pages always fresh.
-  if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match("/offline.html")));
-    return;
-  }
-
-  // Immutable static assets + icons: cache-first.
-  if (
-    url.pathname.startsWith("/_next/static") ||
-    url.pathname.startsWith("/icon") ||
-    url.pathname === "/apple-touch-icon.png"
-  ) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
-            return res;
-          }),
-      ),
-    );
-    return;
-  }
-
-  // Everything else: try network, fall back to any cached copy.
-  event.respondWith(fetch(request).catch(() => caches.match(request)));
+  // Only handle top-level navigations. Everything else (JS, CSS, data, the
+  // Cohesivity API) goes straight to the network as normal — the worker never
+  // intercepts app code, so it can never serve it stale.
+  if (request.mode !== "navigate") return;
+  event.respondWith(fetch(request).catch(() => caches.match(OFFLINE)));
 });
