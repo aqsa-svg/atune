@@ -176,7 +176,7 @@ export function CheckinForm({
 
       <div className="mt-auto pt-2">
         <Button onClick={save} disabled={pending} className="h-11 w-full rounded-xl text-base">
-          {pending ? "Saving…" : editing ? "Update check-in" : "Save check-in"}
+          {pending ? "Reading your day…" : editing ? "Update check-in" : "Save check-in"}
         </Button>
       </div>
     </main>

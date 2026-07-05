@@ -27,6 +27,12 @@ export const HABIT_SUGGESTIONS = [
   { name: "No screens before bed", emoji: "🌙" },
   { name: "Workout", emoji: "🏋️" },
   { name: "Journal", emoji: "✍️" },
+  { name: "Stretch", emoji: "🤸" },
+  { name: "Sunlight", emoji: "☀️" },
+  { name: "Eat veggies", emoji: "🥗" },
+  { name: "Gratitude", emoji: "🙏" },
+  { name: "Deep work", emoji: "🎯" },
+  { name: "Early night", emoji: "🛏️" },
 ] as const;
 
 export function labelForGoal(slug: string): string {

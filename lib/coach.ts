@@ -1,15 +1,15 @@
-import { sql, sqlBatch, parsePgArray } from "./db";
+import { sqlBatch, parsePgArray } from "./db";
 import { storeInsight } from "./data";
 import { chat, extractJson, type ChatMessage } from "./ai";
+import { isGrounded, type CoachReply, type GroundingContext } from "./grounding";
 import { labelForGoal, labelForLow } from "./options";
 
-type DayLog = {
-  day: string;
-  dow: string;
+type LogEntry = {
+  date: string;
   mood: number | null;
   energy: number | null;
   sleep: number | null;
-  habitsDone: number;
+  note: string | null;
 };
 
 type CoachData = {
@@ -17,139 +17,176 @@ type CoachData = {
   lowPeriods: string[];
   wake: string | null;
   sleep: string | null;
-  habitNames: string[];
-  habitTotal: number;
-  logs: DayLog[];
-  checkinCount: number;
+  habits: { id: string; name: string }[];
+  habitCompletions: { habit_id: string; name: string; completed_days: number }[];
+  logs: LogEntry[];
+  dayCount: number;
 };
 
 async function getCoachData(userId: number): Promise<CoachData> {
-  const [p, l, h] = await sqlBatch([
+  const [p, l, h, c] = await sqlBatch([
     { query: `SELECT wake_time, sleep_time, goals, low_periods FROM profile WHERE user_id = $1`, params: [userId] },
     {
-      query: `SELECT to_char(dl.log_date, 'YYYY-MM-DD') AS day, to_char(dl.log_date, 'Dy') AS dow,
-                     dl.mood, dl.energy, dl.sleep_hours,
-                     (SELECT count(*) FROM habit_log hl
-                        WHERE hl.user_id = dl.user_id AND hl.log_date = dl.log_date AND hl.done) AS habits_done
-              FROM daily_log dl
-              WHERE dl.user_id = $1 AND dl.log_date >= CURRENT_DATE - 13
-              ORDER BY dl.log_date`,
+      query: `SELECT to_char(log_date, 'YYYY-MM-DD') AS day, mood, energy, sleep_hours, note
+              FROM daily_log WHERE user_id = $1 AND log_date >= CURRENT_DATE - 13 ORDER BY log_date`,
       params: [userId],
     },
-    { query: `SELECT name FROM habit WHERE user_id = $1 AND archived = FALSE ORDER BY sort, id`, params: [userId] },
+    { query: `SELECT id, name FROM habit WHERE user_id = $1 AND archived = FALSE ORDER BY sort, id`, params: [userId] },
+    {
+      query: `SELECT habit_id, count(*) AS n FROM habit_log
+              WHERE user_id = $1 AND done = TRUE AND log_date >= CURRENT_DATE - 13 GROUP BY habit_id`,
+      params: [userId],
+    },
   ]);
 
   const prof = p?.rows[0] as
     | { wake_time: string | null; sleep_time: string | null; goals: unknown; low_periods: unknown }
     | undefined;
-
-  const logs: DayLog[] = ((l?.rows ?? []) as Record<string, unknown>[]).map((r) => ({
-    day: String(r.day),
-    dow: String(r.dow),
+  const habits = ((h?.rows ?? []) as { id: number | string; name: string }[]).map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+  }));
+  const countById = new Map<string, number>();
+  for (const r of (c?.rows ?? []) as { habit_id: number | string; n: number | string }[]) {
+    countById.set(String(r.habit_id), Number(r.n));
+  }
+  const logs: LogEntry[] = ((l?.rows ?? []) as Record<string, unknown>[]).map((r) => ({
+    date: String(r.day),
     mood: r.mood != null ? Number(r.mood) : null,
     energy: r.energy != null ? Number(r.energy) : null,
     sleep: r.sleep_hours != null ? Number(r.sleep_hours) : null,
-    habitsDone: Number(r.habits_done ?? 0),
+    note: (r.note as string | null) ?? null,
   }));
-
-  const habitNames = ((h?.rows ?? []) as { name: string }[]).map((r) => String(r.name));
 
   return {
     goals: prof ? parsePgArray(prof.goals) : [],
     lowPeriods: prof ? parsePgArray(prof.low_periods) : [],
     wake: prof?.wake_time ?? null,
     sleep: prof?.sleep_time ?? null,
-    habitNames,
-    habitTotal: habitNames.length,
+    habits,
+    habitCompletions: habits.map((x) => ({
+      habit_id: x.id,
+      name: x.name,
+      completed_days: countById.get(x.id) ?? 0,
+    })),
     logs,
-    checkinCount: logs.length,
+    dayCount: logs.length,
   };
 }
 
-type CoachReply = {
-  enough_data?: boolean;
-  insight?: string;
-  evidence?: string[];
-  references_habits?: string[];
-};
+const SYSTEM = `You are the coaching engine for Attune, a wellness app whose single rule is: never
+fabricate. Every word you output must trace back to the data provided in this request.
+If the data doesn't support a claim, you do not make it.
 
-const SYSTEM = `You are Attune, a calm, precise wellness companion.
-You produce exactly ONE short insight (1–2 sentences, warm, specific, second person).
-Hard rules — this is the whole point of the product:
-- Reference ONLY facts present in DATA. Never invent numbers, studies, averages, or patterns.
-- If there are fewer than 4 days of check-ins, you MUST NOT claim any multi-day pattern. Instead give a grounded nudge about what little is logged and that you're still learning.
-- Any habit you name must appear in DATA.habitNames verbatim.
-Return ONLY a JSON object, no prose.`;
+You will receive:
+- profile: the user's stated rhythm, goals, low periods, and habits
+- logs: the user's daily logs for up to the last 14 days (mood, energy, sleep, note), each 1-5 unless noted
+- habits: the list of habits this user actually tracks (name + id)
+- habit_completions: per-habit completion counts over the same window
+- day_count: how many distinct days of logs exist
+
+Return ONE of three things, chosen by how much data exists:
+
+1. PATTERN (only if day_count >= 7 AND a real relationship is present in the numbers)
+   A finding stated with the actual averages as evidence. Rank or contrast when you can
+   ("walking moves your energy more than sleep does") rather than restating the obvious.
+   Never claim a multi-day pattern on fewer than 7 days.
+
+2. EXPERIMENT (the default when day_count < 7, or when data is too thin for a pattern)
+   Do NOT apologize for lacking data. Propose one small, testable action for today drawn
+   ONLY from a habit the user already tracks, and state what you'll compare tomorrow. Frame
+   the user as a co-investigator, not a patient. The experiment must be something the provided
+   data can actually measure later (a tracked habit vs. next-day energy/mood/sleep). One
+   experiment, one variable.
+
+3. HONEST_FALLBACK (only if there is genuinely nothing to work with - 0-1 logs and no completed
+   habits) A brief, calm acknowledgement plus the single first action that starts signal.
+
+Hard rules:
+- Reference only habits that appear in habits. Never invent or rename one.
+- Every claim in evidence must be a number or comparison computable from the data given.
+- No medical, diagnostic, or clinical language. No guarantees. No streak pressure, guilt, or urgency.
+- If choosing between EXPERIMENT and PATTERN and the pattern is weak, choose EXPERIMENT.
+- One insight only. Do not stack multiple findings.
+
+Return ONLY valid JSON, no prose, in this exact shape:
+{
+  "type": "pattern" | "experiment" | "honest_fallback",
+  "enough_data": boolean,
+  "insight": string,
+  "evidence": string[],
+  "references_habits": string[],
+  "experiment": { "action": string, "habit_id": string, "compare": string } | null
+}`;
 
 function buildUser(data: CoachData): string {
-  const readable = {
-    goals: data.goals.map(labelForGoal),
-    lowPeriods: data.lowPeriods.map(labelForLow),
-    usualWake: data.wake,
-    usualSleep: data.sleep,
-    habitNames: data.habitNames,
-    habitTotal: data.habitTotal,
-    checkinDays: data.checkinCount,
+  const payload = {
+    profile: {
+      wake: data.wake,
+      sleep: data.sleep,
+      goals: data.goals.map(labelForGoal),
+      low_periods: data.lowPeriods.map(labelForLow),
+      habits: data.habits.map((h) => h.name),
+    },
     logs: data.logs,
+    habits: data.habits,
+    habit_completions: data.habitCompletions,
+    day_count: data.dayCount,
   };
-  return `DATA:
-${JSON.stringify(readable, null, 2)}
-
-Return JSON with this exact shape:
-{
-  "enough_data": boolean,      // true ONLY if >=4 check-in days AND a real pattern is visible
-  "insight": string,           // <=240 chars, grounded ONLY in DATA
-  "evidence": string[],        // short factual bases drawn directly from DATA (e.g. "energy 2 on Mon")
-  "references_habits": string[] // any habit names you mention; must be from DATA.habitNames
-}`;
-}
-
-/** Deterministic faithfulness gate — the RAGAS instinct without a second model call. */
-function isGrounded(reply: CoachReply | null, data: CoachData): boolean {
-  if (!reply || typeof reply.insight !== "string" || !reply.insight.trim()) return false;
-  const names = new Set(data.habitNames.map((n) => n.toLowerCase()));
-  for (const h of reply.references_habits ?? []) {
-    if (!names.has(String(h).toLowerCase())) return false; // named a habit that doesn't exist
-  }
-  if (reply.enough_data === true && data.checkinCount < 4) return false; // pattern claim on thin data
-  if (!Array.isArray(reply.evidence) || reply.evidence.length === 0) return false;
-  return true;
+  return `DATA:\n${JSON.stringify(payload, null, 2)}`;
 }
 
 function groundingReceipt(data: CoachData): string {
-  const n = data.checkinCount;
+  const n = data.dayCount;
   return `Grounded in ${n} day${n === 1 ? "" : "s"} of your own check-ins`;
 }
 
 function honestFallback(data: CoachData): string {
-  const n = data.checkinCount;
+  const n = data.dayCount;
   if (n < 4) {
     return `You've checked in ${n} day${n === 1 ? "" : "s"} so far. A few more and I'll be able to tell you what actually moves your energy and mood — not before.`;
   }
   return `I'm still watching your check-ins for a pattern clear enough to stand behind. Keep going.`;
 }
 
+export type InsightMeta = { type: string; action?: string; compare?: string };
+
 /**
- * Generate today's grounded insight from real logged data and store it.
- * Best-effort: callers wrap in try/catch so a coach hiccup never breaks a check-in.
+ * Generate today's grounded insight (pattern | experiment | honest_fallback) from real
+ * logged data and store it. The gate — not the model — decides what's trustworthy; on any
+ * failure we fall back honestly. Best-effort: callers wrap in try/catch.
  */
 export async function generateDailyInsight(userId: number): Promise<void> {
   const data = await getCoachData(userId);
-  if (data.checkinCount === 0) return; // nothing logged yet — keep the day-one suggestion
+  if (data.dayCount === 0) return; // nothing logged — keep the day-one suggestion
 
-  const messages: ChatMessage[] = [
-    { role: "system", content: SYSTEM },
-    { role: "user", content: buildUser(data) },
-  ];
+  const ctx: GroundingContext = {
+    habitNames: data.habits.map((h) => h.name),
+    habitIds: data.habits.map((h) => h.id),
+    dayCount: data.dayCount,
+  };
 
-  let body: string;
+  let body = honestFallback(data);
+  let meta: InsightMeta = { type: "honest_fallback" };
+
   try {
-    const raw = await chat(messages, { maxTokens: 400, temperature: 0.4 });
+    const messages: ChatMessage[] = [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: buildUser(data) },
+    ];
+    const raw = await chat(messages, { maxTokens: 500, temperature: 0.4 });
     const reply = extractJson<CoachReply>(raw);
-    body = reply && isGrounded(reply, data) ? reply.insight!.trim() : honestFallback(data);
+    if (reply && isGrounded(reply, ctx)) {
+      body = reply.insight!.trim();
+      // Normalize: only an experiment keeps its experiment object.
+      meta =
+        reply.type === "experiment" && reply.experiment
+          ? { type: "experiment", action: reply.experiment.action, compare: reply.experiment.compare }
+          : { type: reply.type ?? "honest_fallback" };
+    }
   } catch {
-    body = honestFallback(data);
+    // keep the honest fallback
   }
 
-  await storeInsight(userId, "daily", body, groundingReceipt(data));
+  await storeInsight(userId, "daily", body, groundingReceipt(data), meta);
 }

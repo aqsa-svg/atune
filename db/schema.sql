@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS insight (
   UNIQUE (user_id, insight_date, kind)
 );
 
+-- Structured metadata for coach insights (insight type + experiment action/compare).
+ALTER TABLE insight ADD COLUMN IF NOT EXISTS meta JSONB;
+
 -- Freemium state (Stripe wired later).
 CREATE TABLE IF NOT EXISTS subscription (
   user_id                BIGINT PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE,

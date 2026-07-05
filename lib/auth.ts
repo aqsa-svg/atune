@@ -11,6 +11,16 @@ export type SessionUser = {
   picture: string | null;
 };
 
+// Guest demo account — a fixed, out-of-range id so it can never collide with a
+// real Cohesivity user id. Entered via /api/demo (no Google sign-in).
+export const DEMO_USER_ID = -1;
+export const DEMO_USER: SessionUser = {
+  id: DEMO_USER_ID,
+  email: "demo@attune.app",
+  name: "Demo Explorer",
+  picture: null,
+};
+
 /** Stateless JWT check via the edge. Never verify tokens locally. */
 export async function verifyAccess(token: string): Promise<SessionUser | null> {
   try {
@@ -59,6 +69,7 @@ export async function logoutToken(refresh: string): Promise<void> {
 /** Read the current user from the access-token cookie (RSC / route / action safe). */
 export async function getSessionUser(): Promise<SessionUser | null> {
   const store = await cookies();
+  if (store.get("attune_demo")?.value === "1") return DEMO_USER;
   const access = store.get("access_token")?.value;
   if (!access) return null;
   return verifyAccess(access);

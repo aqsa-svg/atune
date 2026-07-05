@@ -40,17 +40,23 @@ export default async function Landing({
             your own data, and never made up.
           </p>
 
-          <div className="flex flex-col items-start gap-3">
-            <a href={login} className={cn(buttonVariants(), "h-11 rounded-xl px-6 text-base")}>
-              Continue with Google
-            </a>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <a href={login} className={cn(buttonVariants(), "h-11 rounded-xl px-6 text-base")}>
+                Continue with Google
+              </a>
+              <a
+                href="/api/demo"
+                className={cn(buttonVariants({ variant: "secondary" }), "h-11 rounded-xl px-6 text-base")}
+              >
+                Try the demo — no sign-in
+              </a>
+            </div>
             {error ? (
-              <p className="text-sm text-destructive">
-                Sign-in didn&rsquo;t complete. Give it another try.
-              </p>
+              <p className="text-sm text-destructive">Sign-in didn&rsquo;t complete. Give it another try.</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Takes a minute. Your first suggestion is ready on day one.
+                The demo is preloaded with two weeks of sample data — see the coach and your patterns right away.
               </p>
             )}
           </div>

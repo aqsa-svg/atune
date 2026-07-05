@@ -3,7 +3,8 @@
 import { useState, useTransition, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { GOALS, LOW_PERIODS, HABIT_SUGGESTIONS } from "@/lib/options";
+import { GOALS, LOW_PERIODS } from "@/lib/options";
+import { HabitPicker } from "@/components/habit-picker";
 import { completeOnboarding } from "@/app/actions/onboarding";
 
 type Habit = { name: string; emoji: string };
@@ -21,11 +22,6 @@ export function OnboardingFlow({ name }: { name: string | null }) {
 
   const toggleStr = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
-
-  const toggleHabit = (h: Habit) =>
-    setHabits((prev) =>
-      prev.some((x) => x.name === h.name) ? prev.filter((x) => x.name !== h.name) : [...prev, h],
-    );
 
   const canContinue =
     step === 1 ? Boolean(wakeTime && sleepTime) : step === 2 ? goals.length > 0 : step === 4 ? habits.length > 0 : true;
@@ -120,15 +116,8 @@ export function OnboardingFlow({ name }: { name: string | null }) {
             )}
 
             {step === 4 && (
-              <Step title="Pick 2–3 habits that matter to you." hint="You can change these anytime.">
-                <div className="flex flex-wrap gap-2.5">
-                  {HABIT_SUGGESTIONS.map((h) => (
-                    <Chip key={h.name} on={habits.some((x) => x.name === h.name)} onClick={() => toggleHabit(h)}>
-                      <span className="mr-1.5">{h.emoji}</span>
-                      {h.name}
-                    </Chip>
-                  ))}
-                </div>
+              <Step title="Pick 2–3 habits that matter to you." hint="Add your own if you don't see it.">
+                <HabitPicker value={habits} onChange={setHabits} />
               </Step>
             )}
 

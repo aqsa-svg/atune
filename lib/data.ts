@@ -38,7 +38,21 @@ export type CheckinInput = {
   doneHabitIds: number[];
 };
 
-export type Insight = { body: string; grounding: string | null; kind: string };
+export type InsightMeta = { type?: string; action?: string; compare?: string };
+export type Insight = { body: string; grounding: string | null; kind: string; meta: InsightMeta | null };
+
+function parseMeta(v: unknown): InsightMeta | null {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as InsightMeta;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof v === "object") return v as InsightMeta;
+  return null;
+}
 
 export type WeekDay = {
   day: string; // YYYY-MM-DD
@@ -151,25 +165,33 @@ export async function persistOnboarding(
 
 export async function storeInsight(
   userId: number,
-  kind: "day_one" | "daily" | "pattern",
+  kind: string,
   body: string,
   grounding: string,
+  meta: InsightMeta | null = null,
 ): Promise<void> {
   await sql(
-    `INSERT INTO insight (user_id, insight_date, kind, body, grounding)
-     VALUES ($1, CURRENT_DATE, $2, $3, $4)
+    `INSERT INTO insight (user_id, insight_date, kind, body, grounding, meta)
+     VALUES ($1, CURRENT_DATE, $2, $3, $4, $5::jsonb)
      ON CONFLICT (user_id, insight_date, kind) DO UPDATE
-       SET body = EXCLUDED.body, grounding = EXCLUDED.grounding`,
-    [userId, kind, body, grounding],
+       SET body = EXCLUDED.body, grounding = EXCLUDED.grounding, meta = EXCLUDED.meta`,
+    [userId, kind, body, grounding, meta ? JSON.stringify(meta) : null],
   );
 }
 
 export async function getLatestInsight(userId: number): Promise<Insight | null> {
-  return sqlOne<Insight>(
-    `SELECT body, grounding, kind FROM insight
+  const row = await sqlOne<Record<string, unknown>>(
+    `SELECT body, grounding, kind, meta FROM insight
      WHERE user_id = $1 ORDER BY insight_date DESC, id DESC LIMIT 1`,
     [userId],
   );
+  if (!row) return null;
+  return {
+    body: String(row.body),
+    grounding: (row.grounding as string | null) ?? null,
+    kind: String(row.kind),
+    meta: parseMeta(row.meta),
+  };
 }
 
 /** Everything the Today + check-in screens need, in one round-trip. */
@@ -182,7 +204,7 @@ export async function getTodayData(userId: number): Promise<TodayData> {
       params: [userId],
     },
     {
-      query: `SELECT body, grounding, kind FROM insight
+      query: `SELECT body, grounding, kind, meta FROM insight
               WHERE user_id = $1 ORDER BY insight_date DESC, id DESC LIMIT 1`,
       params: [userId],
     },
@@ -230,14 +252,97 @@ export async function getTodayData(userId: number): Promise<TodayData> {
     isToday: Boolean(r.is_today),
   }));
 
+  const irow = i?.rows[0] as Record<string, unknown> | undefined;
+  const insight: Insight | null = irow
+    ? {
+        body: String(irow.body),
+        grounding: (irow.grounding as string | null) ?? null,
+        kind: String(irow.kind),
+        meta: parseMeta(irow.meta),
+      }
+    : null;
+
   return {
     onboarded: Boolean((u?.rows[0] as { onboarded_at?: string | null } | undefined)?.onboarded_at),
     habits: ((h?.rows ?? []) as Record<string, unknown>[]).map(toHabit),
-    insight: (i?.rows[0] as Insight | undefined) ?? null,
+    insight,
     log,
     doneHabitIds: ((hl?.rows ?? []) as { habit_id: number | string }[]).map((r) => Number(r.habit_id)),
     week,
   };
+}
+
+/** Profile + active habits for the settings screen, in one round-trip. */
+export async function getSettings(
+  userId: number,
+): Promise<{ profile: Profile | null; habits: Habit[] }> {
+  const [p, h] = await sqlBatch([
+    { query: `SELECT wake_time, sleep_time, goals, low_periods FROM profile WHERE user_id = $1`, params: [userId] },
+    {
+      query: `SELECT id, name, emoji, sort FROM habit
+              WHERE user_id = $1 AND archived = FALSE ORDER BY sort, id`,
+      params: [userId],
+    },
+  ]);
+  const pr = p?.rows[0] as
+    | { wake_time: string | null; sleep_time: string | null; goals: unknown; low_periods: unknown }
+    | undefined;
+  return {
+    profile: pr
+      ? {
+          wake_time: pr.wake_time,
+          sleep_time: pr.sleep_time,
+          goals: parsePgArray(pr.goals),
+          low_periods: parsePgArray(pr.low_periods),
+        }
+      : null,
+    habits: ((h?.rows ?? []) as Record<string, unknown>[]).map(toHabit),
+  };
+}
+
+/**
+ * Update profile + habits from the settings screen. Unlike onboarding, this
+ * PRESERVES habit history: removed habits are archived (not deleted, which would
+ * cascade-delete their check-in logs), and kept habits keep their ids.
+ */
+export async function updateSettings(userId: number, input: OnboardingInput): Promise<void> {
+  await sql(
+    `INSERT INTO profile (user_id, wake_time, sleep_time, goals, low_periods, updated_at)
+     VALUES ($1, $2, $3, $4::text[], $5::text[], NOW())
+     ON CONFLICT (user_id) DO UPDATE
+       SET wake_time = EXCLUDED.wake_time, sleep_time = EXCLUDED.sleep_time,
+           goals = EXCLUDED.goals, low_periods = EXCLUDED.low_periods, updated_at = NOW()`,
+    [userId, input.wakeTime, input.sleepTime, pgTextArray(input.goals), pgTextArray(input.lowPeriods)],
+  );
+
+  const existing = await sql<{ id: number | string; name: string; archived: boolean }>(
+    `SELECT id, name, archived FROM habit WHERE user_id = $1`,
+    [userId],
+  );
+  const byName = new Map(existing.map((h) => [h.name.toLowerCase(), h]));
+  const desired = new Set(input.habits.map((h) => h.name.toLowerCase()));
+
+  const stmts: { query: string; params: unknown[] }[] = [];
+  input.habits.forEach((h, i) => {
+    const ex = byName.get(h.name.toLowerCase());
+    if (ex) {
+      stmts.push({
+        query: `UPDATE habit SET archived = FALSE, sort = $2, emoji = $3 WHERE id = $1`,
+        params: [Number(ex.id), i, h.emoji],
+      });
+    } else {
+      stmts.push({
+        query: `INSERT INTO habit (user_id, name, emoji, sort) VALUES ($1, $2, $3, $4)`,
+        params: [userId, h.name, h.emoji, i],
+      });
+    }
+  });
+  for (const ex of existing) {
+    if (!desired.has(ex.name.toLowerCase()) && !ex.archived) {
+      stmts.push({ query: `UPDATE habit SET archived = TRUE WHERE id = $1`, params: [Number(ex.id)] });
+    }
+  }
+  if (stmts.length) await sqlBatch(stmts);
 }
 
 /** Upsert today's mood/energy/sleep/note and rewrite today's habit completions. */

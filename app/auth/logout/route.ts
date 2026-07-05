@@ -7,5 +7,6 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(new URL("/", req.url));
   res.cookies.delete("access_token");
   res.cookies.delete("refresh_token");
+  res.cookies.delete("attune_demo");
   return res;
 }

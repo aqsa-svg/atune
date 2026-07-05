@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Settings } from "lucide-react";
 import { Check } from "lucide-react";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, DEMO_USER_ID } from "@/lib/auth";
 import { getTodayData } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
@@ -37,6 +38,14 @@ export default async function TodayPage() {
       <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-6 sm:px-8">
         <Logo />
         <div className="flex items-center gap-2">
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            title="Settings"
+            className="grid size-9 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Settings className="size-4" />
+          </Link>
           <ThemeToggle />
           <Link
             href="/auth/logout"
@@ -50,12 +59,30 @@ export default async function TodayPage() {
       </header>
 
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-10 px-5 py-8 sm:px-8">
+        {user.id === DEMO_USER_ID ? (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-haze/40 bg-haze/10 px-4 py-2.5 text-sm">
+            <span className="text-foreground/80">You&rsquo;re exploring demo data — try a check-in, or view your patterns.</span>
+            <Link href="/auth/logout" className="shrink-0 font-medium text-haze underline-offset-4 hover:underline">
+              Exit
+            </Link>
+          </div>
+        ) : null}
         <p className="font-display text-lg text-muted-foreground">
           {greeting()}
           {firstName ? `, ${firstName}` : ""}.
         </p>
 
-        {insight ? (
+        {insight && insight.meta?.type === "experiment" ? (
+          <InsightCard
+            eyebrow="Today's experiment"
+            grounding={insight.meta.compare ? `Tomorrow I'll check: ${insight.meta.compare}` : insight.grounding}
+          >
+            {insight.body}
+            {insight.meta.action ? (
+              <span className="mt-4 block text-lg font-normal text-apricot">{insight.meta.action}</span>
+            ) : null}
+          </InsightCard>
+        ) : insight ? (
           <InsightCard eyebrow="Today · your focus" grounding={insight.grounding}>
             {insight.body}
           </InsightCard>

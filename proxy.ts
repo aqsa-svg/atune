@@ -11,6 +11,7 @@ const AUTH = `${process.env.COHESIVITY_BASE ?? "https://cohesivity.ai"}/edge/aut
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  if (req.cookies.get("attune_demo")?.value === "1") return NextResponse.next();
   if (req.cookies.get("access_token")?.value) return NextResponse.next();
 
   const refresh = req.cookies.get("refresh_token")?.value;
@@ -45,5 +46,11 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/today/:path*", "/onboarding/:path*", "/check-in/:path*", "/insights/:path*"],
+  matcher: [
+    "/today/:path*",
+    "/onboarding/:path*",
+    "/check-in/:path*",
+    "/insights/:path*",
+    "/settings/:path*",
+  ],
 };
