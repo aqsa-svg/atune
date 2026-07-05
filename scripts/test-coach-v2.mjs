@@ -143,12 +143,6 @@ const extract = (t) => {
 
 console.log("habits:", habits.map((x) => `${x.id}:${x.name}`).join(", "));
 
-const full = payload(allLogs);
-console.log(`\n=== RUN 1 — full demo (day_count=${full.day_count}) — expect PATTERN ===`);
-console.log(await coach(full));
-
-await new Promise((r) => setTimeout(r, 35000)); // respect the 2/min Haiku burst limit
-
 const slice = payload(allLogs.slice(0, 3));
 console.log(`\n=== RUN 2 — 3-day slice (day_count=${slice.day_count}) — expect EXPERIMENT ===`);
 const out2 = await coach(slice);

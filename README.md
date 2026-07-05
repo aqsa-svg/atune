@@ -19,7 +19,7 @@ Most habit apps only *record*. Attune *understands*: it turns your 30-second dai
 - **Onboarding** → a personalized day-one suggestion before any data exists (solves the cold-start problem).
 - **Daily check-in** in under 30s — one-tap habits + mood/energy/sleep, with an optional "quick fill from your words" parser.
 - **Today dashboard** — one focal insight, a calm week-at-a-glance rhythm strip, today's habits.
-- **AI coach** — one grounded insight/day via Claude, behind a faithfulness gate.
+- **AI coach** — one grounded insight/day via Claude: a **pattern** once there's enough data, a **daily experiment** while data is thin ("try X today, I'll compare tomorrow"), or an honest "still learning" — chosen by a code-side faithfulness gate.
 - **Pattern detection** — day-of-week energy, habit→energy, and sleep→energy correlations, computed purely from your logs.
 - **Freemium** — logging + weekly view free; deep patterns/predictive coaching are premium.
 
@@ -27,9 +27,9 @@ Most habit apps only *record*. Attune *understands*: it turns your 30-second dai
 
 This is the moat, so it's built deliberately:
 
-- The coach prompt receives **only** the user's real logged data (`lib/coach.ts`).
-- The model returns structured JSON with an `enough_data` flag and the `evidence`/`habits` it relied on.
-- A **deterministic grounding gate** (`isGrounded`) rejects the output if it names a habit that doesn't exist, claims a pattern with fewer than 4 days logged, or cites no evidence — falling back to an honest "still learning" message.
+- The coach prompt receives **only** the user's real logged data (`lib/coach.ts`) — profile, last 14 days of logs, real habits, completion counts.
+- The model returns structured JSON tagged `pattern` | `experiment` | `honest_fallback`, plus the `evidence` and habits it relied on.
+- A pure, unit-tested **grounding gate** (`isGrounded`, `lib/grounding.ts`) is the final authority: it rejects any output that names a habit you don't have (matched by id *or* name), claims a **pattern with fewer than 7 days** of data, or ships an experiment without a real target habit and a measurable comparison. An honest fallback is pre-seeded *before* the model is called, so every failure mode collapses back to it.
 - **Pattern detection** (`lib/patterns.ts`) is pure statistics over the user's own rows, so a surfaced pattern can only ever be a real number from their data.
 
 ## Tech stack
@@ -69,9 +69,9 @@ db/             SQL schema
 
 ## Status & roadmap
 
-Built: the full MVP loop (auth → onboarding → check-in → dashboard → coach → patterns → paywall) + a no-login guest demo.
+Built: the full MVP loop (auth → onboarding → check-in → dashboard → coach → patterns → paywall), a no-login guest demo, an experiment-framing coach for the cold-start week, a settings editor, and a Vitest suite (13 tests) covering the grounding gate, pattern detection, and the parser.
 
-Next: live Stripe checkout, per-visitor demo isolation, a test suite around the grounding gate + pattern detection, and smart notifications.
+Next: live Stripe checkout, deploy to a public URL, per-visitor demo isolation, and smart notifications.
 
 ---
 
