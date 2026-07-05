@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
+import { RegisterSW } from "@/components/register-sw";
 import "./globals.css";
 
 /* Display — Bricolage Grotesque (Google). Carries the personality. */
@@ -33,6 +34,13 @@ export const metadata: Metadata = {
   title: "Attune — an app that attunes to you",
   description:
     "An AI wellness companion that learns your daily patterns and tells you what you need — grounded in your own data, never generic.",
+  applicationName: "Attune",
+  appleWebApp: { capable: true, title: "Attune", statusBarStyle: "default" },
+  icons: { apple: "/apple-touch-icon.png" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#151320",
 };
 
 /* Set the theme before paint so there is no flash. Dark is the default. */
@@ -49,6 +57,7 @@ export default function RootLayout({
     >
       <body className="min-h-full antialiased">
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <RegisterSW />
         {children}
       </body>
     </html>

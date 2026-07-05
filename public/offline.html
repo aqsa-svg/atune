@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Attune — offline</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #151320;
+        color: #ece9f5;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        text-align: center;
+        padding: 24px;
+      }
+      .wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 22rem; }
+      .dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        background: radial-gradient(circle at 32% 30%, #f0b49a, #9a93f5);
+        box-shadow: 0 0 22px 2px rgba(154, 147, 245, 0.55);
+      }
+      h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+      p { color: #928da6; line-height: 1.55; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="dot"></div>
+      <h1>You&rsquo;re offline</h1>
+      <p>Attune needs a connection to read your check-ins. Reconnect and it&rsquo;ll pick up right where you left off.</p>
+    </div>
+  </body>
+</html>
