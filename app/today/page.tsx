@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Check, LogOut, Settings } from "lucide-react";
 import { getSessionUser, DEMO_USER_ID } from "@/lib/auth";
 import { getTodayData } from "@/lib/data";
+import { logout } from "@/app/actions/session";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -47,14 +48,16 @@ export default async function TodayPage() {
           </Link>
           <ThemeToggle />
           {user.id === DEMO_USER_ID ? null : (
-            <Link
-              href="/auth/logout"
-              className="grid size-9 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <LogOut className="size-4" />
-            </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="grid size-9 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut className="size-4" />
+              </button>
+            </form>
           )}
         </div>
       </header>
@@ -63,9 +66,11 @@ export default async function TodayPage() {
         {user.id === DEMO_USER_ID ? (
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-haze/40 bg-haze/10 px-4 py-2.5 text-sm">
             <span className="text-foreground/80">You&rsquo;re exploring demo data — try a check-in, or view your patterns.</span>
-            <Link href="/auth/logout" className="shrink-0 font-medium text-haze underline-offset-4 hover:underline">
-              Exit
-            </Link>
+            <form action={logout} className="shrink-0">
+              <button type="submit" className="font-medium text-haze underline-offset-4 hover:underline">
+                Exit
+              </button>
+            </form>
           </div>
         ) : null}
         <p className="font-display text-lg text-muted-foreground">
