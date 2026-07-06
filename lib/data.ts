@@ -131,6 +131,33 @@ export async function getHabits(userId: number): Promise<Habit[]> {
   return rows.map(toHabit);
 }
 
+/** Create (or revive) a single habit and return it — powers the inline "add
+ *  your own" control on the check-in screen. Reuses an existing habit of the
+ *  same name (case-insensitive), un-archiving it, so history is never
+ *  duplicated. New habits sort to the end of the list. */
+export async function addHabit(userId: number, rawName: string): Promise<Habit | null> {
+  const name = rawName.trim().slice(0, 40);
+  if (!name) return null;
+
+  const existing = await sql<Record<string, unknown>>(
+    `SELECT id, name, emoji, sort FROM habit WHERE user_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1`,
+    [userId, name],
+  );
+  if (existing.length) {
+    const h = toHabit(existing[0]);
+    await sql(`UPDATE habit SET archived = FALSE WHERE id = $1`, [h.id]);
+    return h;
+  }
+
+  const rows = await sql<Record<string, unknown>>(
+    `INSERT INTO habit (user_id, name, emoji, sort)
+     VALUES ($1, $2, '🌱', COALESCE((SELECT MAX(sort) + 1 FROM habit WHERE user_id = $1), 0))
+     RETURNING id, name, emoji, sort`,
+    [userId, name],
+  );
+  return rows.length ? toHabit(rows[0]) : null;
+}
+
 /** Persist onboarding answers, habits, the day-one insight, and the onboarded
  *  flag in one atomic round-trip (the DB region is far, so batching matters). */
 export async function persistOnboarding(

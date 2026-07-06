@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { submitCheckin } from "@/app/actions/checkin";
+import { addHabit } from "@/app/actions/habits";
 import { parseDayText } from "@/lib/parse";
 import type { Habit, DailyLog } from "@/lib/data";
 
@@ -34,8 +35,11 @@ export function CheckinForm({
   const [energy, setEnergy] = useState<number | null>(initial?.energy ?? null);
   const [sleepHours, setSleepHours] = useState<number | null>(initial?.sleepHours ?? null);
   const [done, setDone] = useState<Set<number>>(new Set(doneHabitIds));
+  const [habitList, setHabitList] = useState<Habit[]>(habits);
+  const [newHabit, setNewHabit] = useState("");
   const [filled, setFilled] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [addingHabit, startAddHabit] = useTransition();
 
   const editing = initial !== null;
 
@@ -48,8 +52,27 @@ export function CheckinForm({
     });
   }
 
+  function addNewHabit() {
+    const name = newHabit.trim();
+    if (!name) return;
+    // Already in the list? Just select it — no duplicate, no round-trip.
+    const known = habitList.find((h) => h.name.toLowerCase() === name.toLowerCase());
+    if (known) {
+      setDone((prev) => new Set(prev).add(known.id));
+      setNewHabit("");
+      return;
+    }
+    startAddHabit(async () => {
+      const created = await addHabit(name);
+      if (!created) return;
+      setHabitList((prev) => (prev.some((h) => h.id === created.id) ? prev : [...prev, created]));
+      setDone((prev) => new Set(prev).add(created.id));
+      setNewHabit("");
+    });
+  }
+
   function quickFill() {
-    const p = parseDayText(note, habits);
+    const p = parseDayText(note, habitList);
     if (p.mood) setMood(p.mood);
     if (p.energy) setEnergy(p.energy);
     if (p.sleepHours) setSleepHours(p.sleepHours);
@@ -117,10 +140,10 @@ export function CheckinForm({
         </div>
 
         {/* habits */}
-        {habits.length > 0 ? (
-          <Section label="What did you keep today?">
+        <Section label="What did you keep today?">
+          {habitList.length > 0 ? (
             <div className="flex flex-wrap gap-2.5">
-              {habits.map((h) => {
+              {habitList.map((h) => {
                 const on = done.has(h.id);
                 return (
                   <button
@@ -140,16 +163,34 @@ export function CheckinForm({
                   </button>
                 );
               })}
-              <Link
-                href="/settings"
-                className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              >
-                <Plus className="size-3.5" />
-                Add your own
-              </Link>
             </div>
-          </Section>
-        ) : null}
+          ) : null}
+          <div className="flex items-center gap-2">
+            <input
+              value={newHabit}
+              onChange={(e) => setNewHabit(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addNewHabit();
+                }
+              }}
+              maxLength={40}
+              placeholder="add your own…"
+              className="min-w-0 flex-1 rounded-full border border-border bg-card px-4 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-ring focus:ring-2 focus:ring-ring/40"
+            />
+            <button
+              type="button"
+              onClick={addNewHabit}
+              disabled={!newHabit.trim() || addingHabit}
+              aria-label="Add habit"
+              className="inline-flex items-center gap-1 rounded-full border border-border px-3.5 py-2 text-sm transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Plus className="size-4" />
+              {addingHabit ? "Adding…" : "Add"}
+            </button>
+          </div>
+        </Section>
 
         {/* mood + energy */}
         <Section label="Mood">
