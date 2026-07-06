@@ -124,9 +124,17 @@ export default async function TodayPage() {
         </div>
 
         <section className="flex flex-col gap-4">
-          <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
-            Today&rsquo;s habits
-          </h2>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
+              Today&rsquo;s habits
+            </h2>
+            <Link
+              href="/settings"
+              className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            >
+              Manage &rarr;
+            </Link>
+          </div>
           <ul className="flex flex-col gap-2">
             {habits.map((h) => {
               const isDone = done.has(h.id);

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { submitCheckin } from "@/app/actions/checkin";
@@ -140,6 +140,13 @@ export function CheckinForm({
                   </button>
                 );
               })}
+              <Link
+                href="/settings"
+                className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Plus className="size-3.5" />
+                Add your own
+              </Link>
             </div>
           </Section>
         ) : null}
