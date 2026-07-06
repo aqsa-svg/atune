@@ -1,42 +1,31 @@
-// Attune service worker — v2.
+// Attune service worker — RETIRED (self-destructing).
 //
-// Deliberately minimal. It NEVER caches app code (HTML, or /_next JS/CSS), so it
-// can never freeze the app by serving a stale or mismatched bundle after a
-// deploy. Its only job is to show an on-brand offline page when a navigation
-// fails with no connection.
+// Earlier builds shipped a cache-first worker that could pin a stale JS bundle
+// on a device across deploys, leaving the page painted but frozen (no typing,
+// no taps, no save). Caching app code turned out not to be worth that risk for
+// this app, so the worker is retired.
 //
-// v1 was cache-first on /_next/static, which could pin outdated JavaScript on a
-// device across deploys and leave the page painted but dead. Bumping the cache
-// name below makes this worker delete that old cache on activate, self-healing
-// any device that still has v1 installed.
-const CACHE = "attune-v2";
-const OFFLINE = "/offline.html";
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((c) => c.add(OFFLINE))
-      .then(() => self.skipWaiting()),
-  );
-});
+// This version exists only to *recover* any device still running an older
+// worker. It caches nothing, deletes every cache, force-reloads open pages so
+// they drop the stale in-memory bundle and fetch fresh assets, then unregisters
+// itself. It reaches stuck devices because the browser fetches sw.js on its own
+// update channel, which the old worker cannot intercept.
+self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (event) => {
-  // Purge every previous cache (including the aggressive "attune-v1"). This is
-  // what unbricks devices stuck on the old worker.
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      await self.clients.claim();
+      const clients = await self.clients.matchAll({ type: "window" });
+      for (const client of clients) {
+        // Reload each open page so it loads fresh, uncached JavaScript.
+        client.navigate(client.url);
+      }
+      await self.registration.unregister();
+    })(),
   );
 });
 
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  // Only handle top-level navigations. Everything else (JS, CSS, data, the
-  // Cohesivity API) goes straight to the network as normal — the worker never
-  // intercepts app code, so it can never serve it stale.
-  if (request.mode !== "navigate") return;
-  event.respondWith(fetch(request).catch(() => caches.match(OFFLINE)));
-});
+// No fetch handler: this worker never intercepts a request again.
