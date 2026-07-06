@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Settings } from "lucide-react";
-import { Check } from "lucide-react";
+import { Check, LogOut, Settings } from "lucide-react";
 import { getSessionUser, DEMO_USER_ID } from "@/lib/auth";
 import { getTodayData } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -47,14 +46,16 @@ export default async function TodayPage() {
             <Settings className="size-4" />
           </Link>
           <ThemeToggle />
-          <Link
-            href="/auth/logout"
-            className="grid size-9 place-items-center rounded-full border border-border text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            aria-label="Sign out"
-            title="Sign out"
-          >
-            {firstName?.[0]?.toUpperCase() ?? "•"}
-          </Link>
+          {user.id === DEMO_USER_ID ? null : (
+            <Link
+              href="/auth/logout"
+              className="grid size-9 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="size-4" />
+            </Link>
+          )}
         </div>
       </header>
 
