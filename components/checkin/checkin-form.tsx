@@ -152,7 +152,7 @@ export function CheckinForm({
                     onClick={() => toggleHabit(h.id)}
                     aria-pressed={on}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       on
                         ? "border-transparent bg-primary text-primary-foreground"
                         : "border-border text-foreground hover:bg-secondary",
@@ -209,7 +209,7 @@ export function CheckinForm({
                 type="button"
                 onClick={() => setSleepHours(sleepHours === o.v ? null : o.v)}
                 className={cn(
-                  "min-w-11 rounded-xl border px-3 py-2 text-sm tabular transition-colors",
+                  "min-w-11 rounded-xl border px-3 py-2 text-sm tabular transition active:scale-95",
                   sleepHours === o.v
                     ? "border-transparent bg-primary text-primary-foreground"
                     : "border-border text-foreground hover:bg-secondary",
@@ -270,7 +270,7 @@ function Scale({
             onClick={() => onChange(n)}
             aria-label={`${n} of 5`}
             className={cn(
-              "h-11 flex-1 rounded-xl border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "h-11 flex-1 rounded-xl border transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               value === n
                 ? "border-transparent bg-primary text-primary-foreground"
                 : "border-border hover:bg-secondary",

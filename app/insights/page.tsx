@@ -6,6 +6,7 @@ import { getPatternData, detectPatterns } from "@/lib/patterns";
 import { getTier } from "@/lib/subscription";
 import { switchToFree } from "@/app/actions/subscription";
 import { Paywall } from "@/components/paywall";
+import { PatternCards } from "@/components/pattern-cards";
 
 export default async function InsightsPage() {
   const user = await getSessionUser();
@@ -75,24 +76,7 @@ function Patterns({ data }: { data: Awaited<ReturnType<typeof getPatternData>> }
           </p>
         </div>
       ) : patterns.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          {patterns.map((p, i) => (
-            <div key={i} className="flex flex-col gap-3 rounded-3xl border border-border bg-card p-7">
-              <h2 className="font-display text-xl font-semibold tracking-tight text-balance sm:text-2xl">
-                {p.title}
-              </h2>
-              <p className="leading-relaxed text-muted-foreground">{p.detail}</p>
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1.5 text-[12.5px] text-muted-foreground">
-                <span
-                  className="size-1.5 shrink-0 rounded-full bg-haze"
-                  style={{ boxShadow: "0 0 8px var(--haze)" }}
-                  aria-hidden
-                />
-                {p.grounding}
-              </div>
-            </div>
-          ))}
-        </div>
+        <PatternCards patterns={patterns} />
       ) : (
         <div className="flex flex-col gap-3 rounded-3xl border border-border bg-card p-7">
           <p className="font-display text-xl font-medium text-balance">
